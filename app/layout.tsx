@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Nunito } from "next/font/google";
+import { Toaster } from "sonner";
 import {
   ClerkProvider
 } from '@clerk/nextjs'
@@ -24,7 +25,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={nunito.variable}>
+
         <ClerkProvider>
+          <Toaster />
           {children}
         </ClerkProvider>
       </body>
