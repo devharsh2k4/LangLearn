@@ -1,15 +1,19 @@
 "use server";
 
 import db from "@/db/drizzle";
-import { getCourseById, getUserProgress } from "@/db/queries";
-import { userProgress } from "@/db/schema";
+import { getCourseById, getUserProgress, getUserSubscription  } from "@/db/queries";
+import { challengeProgress, challenges, userProgress } from "@/db/schema";
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+
+
 
 export const upsertUserProgress = async (courseId: number) => {
   const { userId } = await auth();
   const user = await currentUser();
+
 
   if (!userId || !user) {
     throw new Error("User not found");
@@ -51,3 +55,90 @@ export const upsertUserProgress = async (courseId: number) => {
   revalidatePath("/learn");
   redirect("/learn");
 };
+
+export const reduceHearts = async (challengeId:number) => {
+const { userId } = await auth();
+const currentUserProgress = await getUserProgress();
+const userSubscripton = await getUserSubscription();
+
+const challenge = await db.query.challenges.findFirst({
+  where: eq(challenges.id, challengeId)
+});
+
+if(!userProgress )
+
+if(!challenge){ 
+  throw new Error("Challenge not found");
+}
+
+const lessonId = challenge?.lessonId;
+
+if(!userId){
+    throw new Error("User not found");
+}
+
+const existingChallengeProgress = await db.query.challengeProgress.findFirst({
+  where: and(
+    eq(challengeProgress.userId, userId),
+    eq(challengeProgress.challengeId, challengeId)
+  )
+})
+
+const isPractice = !!existingChallengeProgress;
+
+if(isPractice){
+    return{error : "practice"};
+}
+
+if(!currentUserProgress){
+    throw new Error("User progress not found");
+}
+
+if(userSubscripton?.isActive){
+    return {error: "Subscription"};
+
+}
+
+if(currentUserProgress.hearts === 0){
+    return {error: "No hearts left"};
+}
+
+await db.update(userProgress).set({
+  hearts: Math.max(currentUserProgress.hearts - 1, 0),
+}).where(eq(userProgress.userId, userId));
+
+revalidatePath("/learn");
+revalidatePath("/lesson");
+revalidatePath("/quests");
+revalidatePath("/leaderboard");
+revalidatePath("/shop");
+revalidatePath(`/lesson/${lessonId}`);
+}
+
+
+export const refillhearts = async ()=>{
+  const currentUserProgress = await getUserProgress();
+
+  if(!currentUserProgress){
+      throw new Error("User progress not found");
+  }
+
+  if(currentUserProgress.hearts === 5){
+      return {error: "Hearts already full"};
+  }
+
+  if(currentUserProgress.points< POINTS_TO_REFILL){
+      return {error: "Not enough points"};
+  }
+
+  await db.update(userProgress).set({
+      hearts: 5,
+      points: currentUserProgress.points - POINTS_TO_REFILL
+  }).where(eq(userProgress.userId, currentUserProgress.userId));
+
+  revalidatePath("/learn");
+  revalidatePath("/shop");
+  revalidatePath("/quests");
+  revalidatePath("/leaderboard");
+
+}
